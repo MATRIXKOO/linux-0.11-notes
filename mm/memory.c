@@ -33,7 +33,7 @@ volatile void do_exit(long code);
 static inline volatile void oom(void)
 {
 	printk("out of memory\n\r");
-	do_exit(SIGSEGV);
+	do_exit(SIGSEGV); /*资源暂时不可用*/
 }
 
 #define invalidate() \
@@ -41,10 +41,13 @@ __asm__("movl %%eax,%%cr3"::"a" (0))
 
 /* these are not to be changed without changing head.s etc */
 #define LOW_MEM 0x100000
-#define PAGING_MEMORY (15*1024*1024)
+#define PAGING_MEMORY (15*1024*1024) /*main store*/
 #define PAGING_PAGES (PAGING_MEMORY>>12)
-#define MAP_NR(addr) (((addr)-LOW_MEM)>>12)
+#define MAP_NR(addr) (((addr)-LOW_MEM)>>12) /*页号*/
 #define USED 100
+
+
+
 
 #define CODE_SPACE(addr) ((((addr)+4095)&~4095) < \
 current->start_code + current->end_code)
@@ -111,9 +114,9 @@ int free_page_tables(unsigned long from,unsigned long size)
 		panic("free_page_tables called with wrong alignment");
 	if (!from)
 		panic("Trying to free up swapper memory space");
-	size = (size + 0x3fffff) >> 22;
+	size = (size + 0x3fffff) >> 22; 
 	dir = (unsigned long *) ((from>>20) & 0xffc); /* _pg_dir = 0 */
-	for ( ; size-->0 ; dir++) {
+	for ( ; size-- >0 ; dir++) {
 		if (!(1 & *dir))
 			continue;
 		pg_table = (unsigned long *) (0xfffff000 & *dir);
@@ -155,7 +158,7 @@ int copy_page_tables(unsigned long from,unsigned long to,long size)
 	unsigned long * from_dir, * to_dir;
 	unsigned long nr;
 
-	if ((from&0x3fffff) || (to&0x3fffff))
+	if ((from&0x3fffff) || (to&0x3fffff)) 
 		panic("copy_page_tables called with wrong alignment");
 	from_dir = (unsigned long *) ((from>>20) & 0xffc); /* _pg_dir = 0 */
 	to_dir = (unsigned long *) ((to>>20) & 0xffc);
@@ -168,11 +171,13 @@ int copy_page_tables(unsigned long from,unsigned long to,long size)
 		from_page_table = (unsigned long *) (0xfffff000 & *from_dir);
 		if (!(to_page_table = (unsigned long *) get_free_page()))
 			return -1;	/* Out of memory, see freeing */
-		*to_dir = ((unsigned long) to_page_table) | 7;
+		*to_dir = ((unsigned long) to_page_table) | 7; /*设置dir的用户项为用户*/
+		/* 7 = b0111 , U/S ,R/W ,P = U R P*/
+		
 		nr = (from==0)?0xA0:1024;
 		for ( ; nr-- > 0 ; from_page_table++,to_page_table++) {
 			this_page = *from_page_table;
-			if (!(1 & this_page))
+			if (!(1 & this_page)) /*p
 				continue;
 			this_page &= ~2;
 			*to_page_table = this_page;
